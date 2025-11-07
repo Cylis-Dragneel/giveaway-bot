@@ -1,0 +1,5 @@
+.direnv
+.env
+schema.sql
+giveaway-bot
+giveaways.db
