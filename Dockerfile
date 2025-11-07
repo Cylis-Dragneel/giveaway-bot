@@ -1,29 +1,47 @@
-# Stage 1: Build with Nix (in a container)
-FROM nixos/nix:2.24 AS builder
+# ================================
+# Stage 1: Build static binary
+# ================================
+FROM golang:1.24-alpine AS builder
 
-# Enable flakes
-ENV NIX_CONFIG="experimental-features = nix-command flakes"
+# Install build deps
+RUN apk add --no-cache \
+    git \
+    gcc \
+    musl-dev \
+    make
 
-# Copy only the flake (lockfile included)
-WORKDIR /src
-COPY flake.nix flake.lock ./
+# Create app user
+RUN adduser -D -g '' appuser
+
+WORKDIR /app
+
+# Copy go.mod + go.sum first (cache deps)
+COPY go.mod go.sum ./
+
+# Download deps (cached)
+RUN go mod download
+
+# Copy source
 COPY . .
 
-# Build the static binary + Docker image tarball
-RUN nix build .#bot --print-out-paths > /tmp/bot-path && \
-    nix build .#dockerImage --print-out-paths > /tmp/image-path
+# Build static binary
+RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 \
+    go build -ldflags="-s -w" -o discord-bot .
 
-# Extract the binary
-RUN cp $(cat /tmp/bot-path)/bin/giveaway-bot /giveaway-bot
+# ================================
+# Stage 2: Minimal runtime
+# ================================
+FROM alpine:3.20
 
-RUN mkdir /image && \
-    tar -C /image -xf $(cat /tmp/image-path)
+RUN apk add --no-cache ca-certificates
 
-# Stage 2: Runtime – copy from Nix-built layer
-FROM scratch
+# Copy binary
+COPY --from=builder /app/discord-bot /discord-bot
 
-# Copy the exact Nix-built layer
-COPY --from=builder /image /
+# Copy app user (optional, for non-root)
+RUN adduser -D appuser
+USER appuser
+WORKDIR /app
 
 # Run
-CMD ["/bin/giveaway-bot"]
+CMD ["/discord-bot"]
