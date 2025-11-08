@@ -95,6 +95,80 @@ func handleSlashCommand(s *discordgo.Session, i *discordgo.InteractionCreate) {
 				Flags:   discordgo.MessageFlagsEphemeral,
 			},
 		})
+	case "leave-all-giveaways":
+		userID := i.Member.User.ID
+		models.GiveawaysMutex.Lock()
+		defer models.GiveawaysMutex.Unlock()
+
+		leftCount := 0
+		var leftTitles []string
+		var fields []*discordgo.MessageEmbedField
+		for _, ga := range models.Giveaways {
+			if time.Now().After(ga.EndTime) {
+				continue
+			}
+
+			removed := false
+			for idx, p := range ga.Participants {
+				if p == userID {
+					ga.Participants = append(ga.Participants[:idx], ga.Participants[idx+1:]...)
+					removed = true
+					break
+				}
+			}
+			if removed {
+				leftCount++
+				leftTitles = append(leftTitles, escapeMarkdown(ga.Title))
+
+				models.UpdateGiveawayEmbed(s, ga)
+				db.SaveParticipants(ga.ID, ga.Participants)
+			}
+			guildID := i.GuildID
+			if guildID == "" {
+				guildID = "@me" // DMs (shouldn't happen)
+			}
+			link := fmt.Sprintf("https://discord.com/channels/%s/%s/%s", guildID, ga.ChannelID, ga.MessageID)
+			titleLink := fmt.Sprintf("%s %s", escapeMarkdown(ga.Title), link)
+
+			loc, _ := time.LoadLocation("Etc/UTC")
+			timeLeft := fmt.Sprintf("<t:%d:R>", ga.EndTime.In(loc).Unix())
+
+			field := &discordgo.MessageEmbedField{
+				Name:   fmt.Sprintf("%s (ID: `%s`)", titleLink, ga.MessageID),
+				Value:  fmt.Sprintf("Time: %s", timeLeft),
+				Inline: false,
+			}
+			fields = append(fields, field)
+		}
+		if leftCount == 0 {
+			s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: "You are not in any active giveaways.",
+					Flags:   discordgo.MessageFlagsEphemeral,
+				},
+			})
+			return
+		}
+		var msg string
+		if leftCount == 1 {
+			msg = "You have left **1** giveaway:"
+		} else {
+			msg = fmt.Sprintf("You have left **%d** giveaways:", leftCount)
+		}
+		embed := &discordgo.MessageEmbed{
+			Title:  msg,
+			Color:  0x00ff00,
+			Fields: fields,
+		}
+
+		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Embeds: []*discordgo.MessageEmbed{embed},
+				Flags:  discordgo.MessageFlagsEphemeral,
+			},
+		})
 	}
 }
 

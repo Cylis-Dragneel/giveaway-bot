@@ -116,17 +116,16 @@ func EndGiveaway(s *discordgo.Session, ga *Giveaway) {
 		}
 		pingText := strings.Join(winnerMentions, " ")
 		var mentionList string
+		embed := &discordgo.MessageEmbed{
+			Title: fmt.Sprintf("Giveaway %s Ended!", ga.Title),
+			Color: 0xff0000,
+		}
 		if len(winnerMentions) == 1 {
 			mentionList = winnerMentions[0]
+			embed.Description = fmt.Sprintf("**Winner:** %s", mentionList)
 		} else {
 			mentionList = strings.Join(winnerMentions, ", ")
-		}
-		// winnerIdx := rand.Intn(len(ga.Participants))
-		// winnerID := ga.Participants[winnerIdx]
-		embed := &discordgo.MessageEmbed{
-			Title:       "Giveaway Ended!",
-			Description: fmt.Sprintf("**Winner(s):** %s", mentionList),
-			Color:       0xff0000,
+			embed.Description = fmt.Sprintf("**Winners:** %s", mentionList)
 		}
 		components := []discordgo.MessageComponent{
 			discordgo.ActionsRow{
@@ -151,36 +150,37 @@ func EndGiveaway(s *discordgo.Session, ga *Giveaway) {
 		if err != nil {
 			log.Println("Error sending winner message:", err)
 		}
-	}
 
-	components := []discordgo.MessageComponent{
-		discordgo.ActionsRow{
-			Components: []discordgo.MessageComponent{
-				discordgo.Button{
-					Emoji:    &discordgo.ComponentEmoji{Name: "🎉"},
-					Style:    discordgo.PrimaryButton,
-					CustomID: "enter_giveaway",
-					Disabled: true,
-				},
-				discordgo.Button{
-					Label:    "Participants",
-					Style:    discordgo.SecondaryButton,
-					CustomID: "list_participants_1",
+		components = []discordgo.MessageComponent{
+			discordgo.ActionsRow{
+				Components: []discordgo.MessageComponent{
+					discordgo.Button{
+						Emoji:    &discordgo.ComponentEmoji{Name: "🎉"},
+						Style:    discordgo.PrimaryButton,
+						CustomID: "enter_giveaway",
+						Disabled: true,
+					},
+					discordgo.Button{
+						Label:    "Participants",
+						Style:    discordgo.SecondaryButton,
+						CustomID: "list_participants_1",
+					},
 				},
 			},
-		},
-	}
-	messageEdit := &discordgo.MessageEdit{
-		ID:         ga.MessageID,
-		Channel:    ga.ChannelID,
-		Components: &components,
-	}
-	_, err = s.ChannelMessageEditComplex(messageEdit)
-	if err != nil {
-		log.Printf("Error updating message components for message %s in channel %s: %v", ga.MessageID, ga.ChannelID, err)
-		_, sendErr := s.ChannelMessageSend(ga.ChannelID, "Giveaway ended, but could not update the original message.")
-		if sendErr != nil {
-			log.Println("Error sending fallback message:", sendErr)
+		}
+		messageEdit := &discordgo.MessageEdit{
+			ID:         ga.MessageID,
+			Channel:    ga.ChannelID,
+			Embed:      embed,
+			Components: &components,
+		}
+		_, err = s.ChannelMessageEditComplex(messageEdit)
+		if err != nil {
+			log.Printf("Error updating message components for message %s in channel %s: %v", ga.MessageID, ga.ChannelID, err)
+			_, sendErr := s.ChannelMessageSend(ga.ChannelID, "Giveaway ended, but could not update the original message.")
+			if sendErr != nil {
+				log.Println("Error sending fallback message:", sendErr)
+			}
 		}
 	}
 

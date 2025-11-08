@@ -77,6 +77,10 @@ func GetCommands() []*discordgo.ApplicationCommand {
 				},
 			},
 		},
+		{
+			Name:        "leave-all-giveaways",
+			Description: "Leave all giveaways you have entered",
+		},
 	}
 }
 
