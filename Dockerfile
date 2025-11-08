@@ -33,7 +33,7 @@ RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 \
 # ================================
 FROM alpine:3.20
 
-RUN apk add --no-cache ca-certificates
+RUN apk add --no-cache ca-certificates tzdata
 
 # Copy binary
 COPY --from=builder /app/discord-bot /discord-bot

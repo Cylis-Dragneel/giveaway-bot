@@ -65,6 +65,18 @@ func GetCommands() []*discordgo.ApplicationCommand {
 			Name:        "my-giveaways",
 			Description: "List giveaways you have entered",
 		},
+		{
+			Name:        "leave-giveaway",
+			Description: "Leave a giveaway using its ID",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "id",
+					Description: "Giveaway ID (shown in /list-giveaways)",
+					Required:    true,
+				},
+			},
+		},
 	}
 }
 

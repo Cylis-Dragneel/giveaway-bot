@@ -43,6 +43,58 @@ func handleSlashCommand(s *discordgo.Session, i *discordgo.InteractionCreate) {
 			userID = i.User.ID
 		}
 		listGiveaways(s, i, userID)
+	case "leave-giveaway":
+		giveawayID := data.Options[0].StringValue()
+		userID := i.Member.User.ID
+
+		models.GiveawaysMutex.Lock()
+		ga, exists := models.Giveaways[giveawayID]
+		if !exists {
+			models.GiveawaysMutex.Unlock()
+			s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: "Giveaway not found or already ended.",
+					Flags:   discordgo.MessageFlagsEphemeral,
+				},
+			})
+			return
+		}
+
+		// Remove user from participants
+		removed := false
+		for idx, p := range ga.Participants {
+			if p == userID {
+				ga.Participants = append(ga.Participants[:idx], ga.Participants[idx+1:]...)
+				removed = true
+				break
+			}
+		}
+
+		if !removed {
+			models.GiveawaysMutex.Unlock()
+			s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: "You are not in this giveaway.",
+					Flags:   discordgo.MessageFlagsEphemeral,
+				},
+			})
+			return
+		}
+
+		// Update embed + DB
+		models.UpdateGiveawayEmbed(s, ga)
+		db.SaveParticipants(ga.ID, ga.Participants)
+		models.GiveawaysMutex.Unlock()
+
+		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: fmt.Sprintf("You have left the giveaway **%s**", escapeMarkdown(ga.Title)),
+				Flags:   discordgo.MessageFlagsEphemeral,
+			},
+		})
 	}
 }
 
