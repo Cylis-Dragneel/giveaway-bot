@@ -292,6 +292,16 @@ func getOption(m map[string]*discordgo.ApplicationCommandInteractionDataOption, 
 }
 
 func createGiveaway(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	if !hasPermission(s, i) {
+		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: "You do not have permissions to use this command.",
+				Flags:   discordgo.MessageFlagsEphemeral,
+			},
+		})
+		return
+	}
 	options := i.ApplicationCommandData().Options
 	optionMap := make(map[string]*discordgo.ApplicationCommandInteractionDataOption, len(options))
 	for _, opt := range options {

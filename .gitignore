@@ -1,5 +1,5 @@
 .direnv
 .env
 giveaway-bot
-giveaways.db
+giveaway.db
 result
