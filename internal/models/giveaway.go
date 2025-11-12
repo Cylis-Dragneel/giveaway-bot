@@ -19,6 +19,7 @@ type Giveaway struct {
 	EndTime      time.Time
 	RoleID       string
 	Participants []string
+	Excluded     []string
 	ChannelID    string
 	MessageID    string
 	Timer        *time.Timer
@@ -110,7 +111,8 @@ func EndGiveaway(s *discordgo.Session, ga *Giveaway) {
 			ga.Participants[i], ga.Participants[j] = ga.Participants[j], ga.Participants[i]
 		})
 		winners := ga.Participants[:winnersCount]
-		// winnerMentions := make([]string, len(winners))
+		ga.Excluded = make([]string, len(winners))
+		copy(ga.Excluded, winners)
 		var winnerMentions []string
 		for _, uid := range winners {
 			winnerMentions = append(winnerMentions, fmt.Sprintf("<@%s>", uid))
@@ -134,7 +136,7 @@ func EndGiveaway(s *discordgo.Session, ga *Giveaway) {
 					discordgo.Button{
 						Label:    "Reroll",
 						Style:    discordgo.PrimaryButton,
-						CustomID: "reroll",
+						CustomID: "reroll_" + ga.ID,
 					},
 				},
 			},
@@ -185,7 +187,4 @@ func EndGiveaway(s *discordgo.Session, ga *Giveaway) {
 		}
 	}
 
-	GiveawaysMutex.Lock()
-	delete(Giveaways, ga.ID)
-	GiveawaysMutex.Unlock()
 }

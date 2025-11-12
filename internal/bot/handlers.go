@@ -282,8 +282,20 @@ func handleButtonClick(s *discordgo.Session, i *discordgo.InteractionCreate) {
 			page++
 		}
 		showParticipants(s, i, page, messageID)
-	} else if customID == "reroll" {
-		handleReroll(s, i)
+	} else if strings.HasPrefix(customID, "reroll_") {
+		if !hasPermission(s, i) {
+			s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: "You do not have permissions to reroll.",
+					Flags:   discordgo.MessageFlagsEphemeral,
+				},
+			})
+			return
+		}
+		giveawayID := strings.TrimPrefix(customID, "reroll_")
+		handleReroll(s, i, giveawayID)
+		return
 	}
 }
 
@@ -547,17 +559,38 @@ func handleModalSubmit(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	}
 }
 
-func handleReroll(s *discordgo.Session, i *discordgo.InteractionCreate) {
-	originalMsgID := i.Message.ID
-	ga, ok := models.Giveaways[originalMsgID]
+func handleReroll(s *discordgo.Session, i *discordgo.InteractionCreate, giveawayID string) {
+	models.GiveawaysMutex.Lock()
+	ga, ok := models.Giveaways[giveawayID]
 	var participants []string
 	if ok {
 		participants = ga.Participants
-	} else {
-		participants = db.LoadParticipants(originalMsgID, ga.GuildID)
+	}
+	if !ok || ga.GuildID != i.GuildID {
+		models.GiveawaysMutex.Unlock()
+		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: "Giveaway not found.",
+				Flags:   discordgo.MessageFlagsEphemeral,
+			},
+		})
+		return
+	}
+	models.GiveawaysMutex.Unlock()
+
+	eligible := make([]string, 0, len(participants))
+	winnerSet := make(map[string]bool)
+	for _, w := range ga.Excluded {
+		winnerSet[w] = true
 	}
 
-	if len(participants) == 0 {
+	for _, p := range ga.Participants {
+		if !winnerSet[p] {
+			eligible = append(eligible, p)
+		}
+	}
+	if len(eligible) == 0 {
 		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{
@@ -567,20 +600,44 @@ func handleReroll(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		})
 		return
 	}
-	winnerIdx := rand.Intn(len(participants))
-	winnerID := participants[winnerIdx]
-
-	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseUpdateMessage,
-		Data: &discordgo.InteractionResponseData{
-			Content: fmt.Sprintf("<@%s>", winnerID),
-			Embeds: []*discordgo.MessageEmbed{
-				{
-					Title:       "Giveaway Rerolled!",
-					Description: fmt.Sprintf("New Winner: <@%s>", winnerID),
-					Color:       0xff0000,
+	winnerIdx := rand.Intn(len(eligible))
+	winnerID := eligible[winnerIdx]
+	ga.Excluded = append(ga.Excluded, winnerID)
+	rerollComponents := []discordgo.MessageComponent{
+		discordgo.ActionsRow{
+			Components: []discordgo.MessageComponent{
+				discordgo.Button{
+					Label:    "Reroll",
+					Style:    discordgo.PrimaryButton,
+					CustomID: "reroll_" + ga.ID,
 				},
 			},
+		},
+	}
+
+	embed := &discordgo.MessageEmbed{
+		Title:       "New Winner",
+		Description: fmt.Sprintf("<@%s>", winnerID),
+		Color:       0x00ff00,
+	}
+	_, err := s.ChannelMessageSendComplex(ga.ChannelID, &discordgo.MessageSend{
+		Content:    fmt.Sprintf("<@%s>", winnerID),
+		Embed:      embed,
+		Components: rerollComponents,
+		Reference: &discordgo.MessageReference{
+			MessageID: ga.MessageID,
+			ChannelID: ga.ChannelID,
+		},
+	})
+	if err != nil {
+		log.Println("Error sending reroll message:", err)
+	}
+
+	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Content: "Reroll complete!",
+			Flags:   discordgo.MessageFlagsEphemeral,
 		},
 	})
 }
