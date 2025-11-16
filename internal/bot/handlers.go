@@ -270,18 +270,24 @@ func handleButtonClick(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	if customID == "enter_giveaway" {
 		handleEnterGiveaway(s, i, userID, messageID)
 	} else if strings.HasPrefix(customID, "list_participants_") {
-		pageStr := strings.TrimPrefix(customID, "list_participants_")
-		page, _ := strconv.Atoi(pageStr)
-		showParticipants(s, i, page, messageID)
+		parts := strings.Split(customID, "_")
+		if len(parts) != 4 {
+			return
+		}
+		page, _ := strconv.Atoi(parts[2])
+		giveawayID := parts[3]
+		showParticipants(s, i, page, giveawayID, "")
+		return
 	} else if strings.HasPrefix(customID, "next_page_") || strings.HasPrefix(customID, "prev_page_") {
 		parts := strings.Split(customID, "_")
 		page, _ := strconv.Atoi(parts[2])
+		giveawayID := parts[3]
 		if parts[0] == "prev" {
 			page--
 		} else {
 			page++
 		}
-		showParticipants(s, i, page, messageID)
+		showParticipants(s, i, page, giveawayID, messageID)
 	} else if strings.HasPrefix(customID, "reroll_") {
 		if !hasPermission(s, i) {
 			s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
@@ -369,7 +375,7 @@ func createGiveaway(s *discordgo.Session, i *discordgo.InteractionCreate) {
 				discordgo.Button{
 					Label:    "Participants",
 					Style:    discordgo.SecondaryButton,
-					CustomID: "list_participants_0",
+					CustomID: "list_participants_0_1234",
 				},
 			},
 		},
@@ -385,9 +391,39 @@ func createGiveaway(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		})
 		return
 	}
+	giveawayID := msg.ID
+
+	// Update components with real ID
+	updatedComponents := []discordgo.MessageComponent{
+		discordgo.ActionsRow{
+			Components: []discordgo.MessageComponent{
+				discordgo.Button{
+					Emoji:    &discordgo.ComponentEmoji{Name: "🎉"},
+					Style:    discordgo.PrimaryButton,
+					CustomID: "enter_giveaway",
+				},
+				discordgo.Button{
+					Label:    "Participants",
+					Style:    discordgo.SecondaryButton,
+					CustomID: "list_participants_0_" + giveawayID, // ← real ID
+				},
+			},
+		},
+	}
+
+	// Edit the message to update buttons
+	_, err = s.ChannelMessageEditComplex(&discordgo.MessageEdit{
+		ID:         msg.ID,
+		Channel:    i.ChannelID,
+		Embed:      embed,
+		Components: &updatedComponents,
+	})
+	if err != nil {
+		log.Println("Failed to update components:", err)
+	}
 
 	ga := &models.Giveaway{
-		ID:           msg.ID,
+		ID:           giveawayID,
 		GuildID:      i.GuildID,
 		Title:        title,
 		EndTime:      endTime,
@@ -642,8 +678,10 @@ func handleReroll(s *discordgo.Session, i *discordgo.InteractionCreate, giveaway
 	})
 }
 
-func showParticipants(s *discordgo.Session, i *discordgo.InteractionCreate, page int, messageID string) {
-	ga, ok := models.Giveaways[messageID]
+func showParticipants(s *discordgo.Session, i *discordgo.InteractionCreate, page int, giveawayID string, messageID string) {
+	models.GiveawaysMutex.RLock()
+	ga, ok := models.Giveaways[giveawayID]
+	models.GiveawaysMutex.RUnlock()
 	if !ok {
 		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
@@ -655,7 +693,7 @@ func showParticipants(s *discordgo.Session, i *discordgo.InteractionCreate, page
 		return
 	}
 
-	const perPage = 10
+	const perPage = 1
 	total := len(ga.Participants)
 	maxPage := (total + perPage - 1) / perPage
 	if page < 0 {
@@ -704,27 +742,38 @@ func showParticipants(s *discordgo.Session, i *discordgo.InteractionCreate, page
 			row.Components = append(row.Components, discordgo.Button{
 				Label:    "Previous",
 				Style:    discordgo.SecondaryButton,
-				CustomID: fmt.Sprintf("prev_page_%d_%s", page, messageID),
+				CustomID: fmt.Sprintf("prev_page_%d_%s", page, ga.ID),
 			})
 		}
 		if page < maxPage-1 {
 			row.Components = append(row.Components, discordgo.Button{
 				Label:    "Next",
 				Style:    discordgo.SecondaryButton,
-				CustomID: fmt.Sprintf("next_page_%d_%s", page, messageID),
+				CustomID: fmt.Sprintf("next_page_%d_%s", page, ga.ID),
 			})
 		}
 		components = append(components, row)
 	}
 
-	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseChannelMessageWithSource,
-		Data: &discordgo.InteractionResponseData{
-			Embeds:     []*discordgo.MessageEmbed{embed},
-			Components: components,
-			Flags:      discordgo.MessageFlagsEphemeral,
-		},
-	})
+	if messageID == "" {
+		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Embeds:     []*discordgo.MessageEmbed{embed},
+				Components: components,
+				Flags:      discordgo.MessageFlagsEphemeral,
+			},
+		})
+	} else {
+		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseUpdateMessage,
+			Data: &discordgo.InteractionResponseData{
+				Embeds:     []*discordgo.MessageEmbed{embed},
+				Components: components,
+				Flags:      discordgo.MessageFlagsEphemeral,
+			},
+		})
+	}
 }
 
 // Prevent markdown injection in titles
