@@ -950,6 +950,28 @@ func editGiveaways(i *discordgo.Interaction, s *discordgo.Session) {
 				changes = append(changes, "required role")
 			}
 		}
+
+		if ga.RoleID != "" {
+			beforeCount := len(ga.Participants)
+			var eligible []string
+
+			for _, userID := range ga.Participants {
+				member, err := s.GuildMember(i.GuildID, userID)
+				if err != nil || member == nil {
+					continue
+				}
+				if slices.Contains(member.Roles, ga.RoleID){
+					eligible = append(eligible, userID)
+				}
+			}
+
+			ga.Participants = eligible
+			removed := beforeCount - len(eligible)
+			if removed > 0 {
+				changes = append(changes, fmt.Sprintf("removed %d ineligible participant(s)", removed))
+				db.SaveParticipants(ga.ID,ga.GuildID,ga.Participants)
+			}
+		}
 	}
 
 	// Winners count
