@@ -45,7 +45,17 @@ func CloseDB() {
 }
 
 func SaveGiveaway(ga *models.Giveaway) {
-	_, err := DB.Exec(`INSERT INTO giveaways (id, guild_id, title, end_time, role_id, channel_id, message_id, winners) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+	_, err := DB.Exec(`
+		INSERT INTO giveaways
+			(id, guild_id, title, end_time, role_id, channel_id, message_id, winners)
+		VALUES
+			(?, ?, ?, ?, ?, ?, ?, ?)
+		On CONFLICT(id, guild_id) DO UPDATE SET
+			title = excluded.title,
+			end_time = excluded.end_time,
+			role_id = excluded.role_id,
+			winners = excluded.winners
+	`,
 		ga.ID, ga.GuildID, ga.Title, ga.EndTime.Unix(), ga.RoleID, ga.ChannelID, ga.MessageID, ga.Winners)
 	if err != nil {
 		log.Println("Error saving giveaway:", err)

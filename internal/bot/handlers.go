@@ -239,7 +239,19 @@ func handleSlashCommand(s *discordgo.Session, i *discordgo.InteractionCreate) {
 				Flags: discordgo.MessageFlagsEphemeral,
 			},
 		})
+	case "edit-giveaway":
+		if !hasPermission(s, i) {
+			s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: "You do not have permission to edit giveaways.",
+					Flags:   discordgo.MessageFlagsEphemeral,
+				},
+			})
+			return
+		}
 
+		editGiveaways(i.Interaction, s)
 	}
 }
 
@@ -856,6 +868,120 @@ func listGiveaways(s *discordgo.Session, i *discordgo.InteractionCreate, userID 
 		Data: &discordgo.InteractionResponseData{
 			Embeds: []*discordgo.MessageEmbed{embed},
 			Flags:  discordgo.MessageFlagsEphemeral,
+		},
+	})
+}
+
+func editGiveaways(i *discordgo.Interaction, s *discordgo.Session) {
+	optionMap := make(map[string]*discordgo.ApplicationCommandInteractionDataOption)
+	options := i.ApplicationCommandData().Options
+	for _, opt := range options {
+		optionMap[opt.Name] = opt
+	}
+
+	giveawayId := optionMap["id"].StringValue()
+	models.GiveawaysMutex.Lock()
+	ga, exists := models.Giveaways[giveawayId]
+	if !exists || ga.GuildID != i.GuildID {
+		models.GiveawaysMutex.Unlock()
+		s.InteractionRespond(i, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: "Giveaway not found or already ended.",
+				Flags:   discordgo.MessageFlagsEphemeral,
+			},
+		})
+		return
+	}
+
+	changed := false
+	var changes []string
+
+	// Title
+	if titleOpt := optionMap["title"]; titleOpt != nil {
+		newTitle := titleOpt.StringValue()
+		if newTitle != ga.Title {
+			ga.Title = newTitle
+			changed = true
+			changes = append(changes, "title")
+		}
+	}
+
+	// End Time
+	if endOpt := optionMap["end"]; endOpt != nil {
+		newEndStr := endOpt.StringValue()
+		newEnd, err := models.ParseEndTime(newEndStr)
+		if err != nil {
+			models.GiveawaysMutex.Unlock()
+			s.InteractionRespond(i, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: "Invalid end time: " + err.Error(),
+					Flags:   discordgo.MessageFlagsEphemeral,
+				},
+			})
+			return
+		}
+		if !newEnd.Equal(ga.EndTime) {
+			if ga.Timer != nil {
+				ga.Timer.Stop()
+			}
+			duration := time.Until(newEnd)
+			ga.Timer = time.AfterFunc(duration, func() {
+				models.EndGiveaway(s, ga)
+			})
+			ga.EndTime = newEnd
+			changed = true
+			changes = append(changes, "end time")
+		}
+	}
+
+	// Role
+	if roleOpt := optionMap["role"]; roleOpt != nil {
+		if roleOpt.RoleValue(nil, "") != nil && roleOpt.RoleValue(nil, "").ID == i.GuildID {
+			ga.RoleID = ""
+			changed = true
+			changes = append(changes, "required role removed")
+		} else {
+			newRoleID := roleOpt.RoleValue(nil, "").ID
+			if newRoleID != ga.RoleID {
+				ga.RoleID = newRoleID
+				changed = true
+				changes = append(changes, "required role")
+			}
+		}
+	}
+
+	// Winners count
+	if winnersOpt := optionMap["winners"]; winnersOpt != nil {
+		newWinners := int(winnersOpt.IntValue())
+		if newWinners != ga.Winners {
+			ga.Winners = newWinners
+			changed = true
+			changes = append(changes, "winner count")
+		}
+	}
+
+	if !changed {
+		models.GiveawaysMutex.Unlock()
+		s.InteractionRespond(i, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: "No changes were made",
+				Flags:   discordgo.MessageFlagsEphemeral,
+			},
+		})
+		return
+	}
+
+	db.SaveGiveaway(ga)
+	models.UpdateGiveawayEmbed(s, ga)
+	models.GiveawaysMutex.Unlock()
+	s.InteractionRespond(i, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Content: fmt.Sprintf("Giveaway updated! Changed: %s", strings.Join(changes, ", ")),
+			Flags:   discordgo.MessageFlagsEphemeral,
 		},
 	})
 }

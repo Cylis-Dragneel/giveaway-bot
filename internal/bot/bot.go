@@ -99,6 +99,42 @@ func GetCommands() []*discordgo.ApplicationCommand {
 				},
 			},
 		},
+		{
+			Name:        "edit-giveaway",
+			Description: "Edit an active giveaway",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "id",
+					Description: "Giveaway ID (from /list-giveaways)",
+					Required:    true,
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "title",
+					Description: "New Title",
+					Required:    false,
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "end",
+					Description: "New end time: duration (1h30m) or date/time (YYYY-MM-DD HH:MM).",
+					Required:    false,
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionRole,
+					Name:        "role",
+					Description: "New required role (select @everyone to remove requirement)",
+					Required:    false,
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionInteger,
+					Name:        "winners",
+					Description: "New number of winners",
+					Required:    false,
+				},
+			},
+		},
 	}
 }
 

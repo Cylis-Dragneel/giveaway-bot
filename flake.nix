@@ -63,6 +63,7 @@
             gotools
             golangci-lint
             gopls
+            gofumpt
             gcc
           ];
         };
