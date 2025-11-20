@@ -704,7 +704,7 @@ func showParticipants(s *discordgo.Session, i *discordgo.InteractionCreate, page
 		return
 	}
 
-	const perPage = 1
+	const perPage = 10
 	total := len(ga.Participants)
 	maxPage := (total + perPage - 1) / perPage
 	if page < 0 {
