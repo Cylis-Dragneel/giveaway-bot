@@ -283,12 +283,11 @@ func handleButtonClick(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		handleEnterGiveaway(s, i, userID, messageID)
 	} else if strings.HasPrefix(customID, "list_participants_") {
 		parts := strings.Split(customID, "_")
-		if len(parts) != 4 {
+		if len(parts) != 3 {
 			return
 		}
-		page, _ := strconv.Atoi(parts[2])
-		giveawayID := parts[3]
-		showParticipants(s, i, page, giveawayID, "")
+		giveawayID := parts[2]
+		showParticipants(s, i, 0, giveawayID, "")
 		return
 	} else if strings.HasPrefix(customID, "next_page_") || strings.HasPrefix(customID, "prev_page_") {
 		parts := strings.Split(customID, "_")
@@ -705,7 +704,7 @@ func showParticipants(s *discordgo.Session, i *discordgo.InteractionCreate, page
 		return
 	}
 
-	const perPage = 10
+	const perPage = 1
 	total := len(ga.Participants)
 	maxPage := (total + perPage - 1) / perPage
 	if page < 0 {
@@ -748,21 +747,20 @@ func showParticipants(s *discordgo.Session, i *discordgo.InteractionCreate, page
 	components := []discordgo.MessageComponent{}
 	if maxPage > 1 {
 		row := discordgo.ActionsRow{
-			Components: []discordgo.MessageComponent{},
-		}
-		if page > 0 {
-			row.Components = append(row.Components, discordgo.Button{
-				Label:    "Previous",
-				Style:    discordgo.SecondaryButton,
-				CustomID: fmt.Sprintf("prev_page_%d_%s", page, ga.ID),
-			})
-		}
-		if page < maxPage-1 {
-			row.Components = append(row.Components, discordgo.Button{
-				Label:    "Next",
-				Style:    discordgo.SecondaryButton,
-				CustomID: fmt.Sprintf("next_page_%d_%s", page, ga.ID),
-			})
+			Components: []discordgo.MessageComponent{
+				discordgo.Button{
+					Label:    "Previous",
+					Style:    discordgo.SecondaryButton,
+					CustomID: fmt.Sprintf("prev_page_%d_%s", page, ga.ID),
+					Disabled: !(page > 0),
+				},
+				discordgo.Button{
+					Label:    "Next",
+					Style:    discordgo.SecondaryButton,
+					CustomID: fmt.Sprintf("next_page_%d_%s", page, ga.ID),
+					Disabled: !(page < maxPage-1),
+				},
+			},
 		}
 		components = append(components, row)
 	}
@@ -960,7 +958,7 @@ func editGiveaways(i *discordgo.Interaction, s *discordgo.Session) {
 				if err != nil || member == nil {
 					continue
 				}
-				if slices.Contains(member.Roles, ga.RoleID){
+				if slices.Contains(member.Roles, ga.RoleID) {
 					eligible = append(eligible, userID)
 				}
 			}
@@ -969,7 +967,7 @@ func editGiveaways(i *discordgo.Interaction, s *discordgo.Session) {
 			removed := beforeCount - len(eligible)
 			if removed > 0 {
 				changes = append(changes, fmt.Sprintf("removed %d ineligible participant(s)", removed))
-				db.SaveParticipants(ga.ID,ga.GuildID,ga.Participants)
+				db.SaveParticipants(ga.ID, ga.GuildID, ga.Participants)
 			}
 		}
 	}

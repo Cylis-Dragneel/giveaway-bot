@@ -148,7 +148,7 @@ func EndGiveaway(s *discordgo.Session, ga *Giveaway) {
 					discordgo.Button{
 						Label:    "Participants",
 						Style:    discordgo.SecondaryButton,
-						CustomID: "list_participants_1",
+						CustomID: "list_participants",
 						Disabled: true,
 					},
 				},
@@ -239,7 +239,7 @@ func EndGiveaway(s *discordgo.Session, ga *Giveaway) {
 					discordgo.Button{
 						Label:    "Participants",
 						Style:    discordgo.SecondaryButton,
-						CustomID: "list_participants_1_" + ga.ID,
+						CustomID: "list_participants_" + ga.ID,
 					},
 				},
 			},
