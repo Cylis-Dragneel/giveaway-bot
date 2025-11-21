@@ -386,7 +386,7 @@ func createGiveaway(s *discordgo.Session, i *discordgo.InteractionCreate) {
 				discordgo.Button{
 					Label:    "Participants",
 					Style:    discordgo.SecondaryButton,
-					CustomID: "list_participants_0_1234",
+					CustomID: "list_participants_",
 				},
 			},
 		},
@@ -416,7 +416,7 @@ func createGiveaway(s *discordgo.Session, i *discordgo.InteractionCreate) {
 				discordgo.Button{
 					Label:    "Participants",
 					Style:    discordgo.SecondaryButton,
-					CustomID: "list_participants_0_" + giveawayID, // ← real ID
+					CustomID: "list_participants_" + giveawayID, // ← real ID
 				},
 			},
 		},
